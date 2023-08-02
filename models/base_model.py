@@ -1,5 +1,7 @@
 #!/usr/bin/python3
-
+"""
+BaseModel Class Implementation
+"""
 from sqlalchemy import Column, String, DateTime
 from datetime import datetime
 import models
@@ -8,6 +10,7 @@ import uuid
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
+
 
 class BaseModel:
     """The BaseModel class from which future classes will be derived"""
@@ -39,8 +42,9 @@ class BaseModel:
 
     def __str__(self):
         """String representation of the BaseModel class"""
-        return "[{:s}] ({:s}) {}".format(self.__class__.__name__, self.id,
-                                         self.__dict__)
+        return "[{:s}] ({:s}) {}".format(
+            self.__class__.__name__, self.id, self.__dict__
+        )
 
     def save(self):
         """Updates the attribute 'updated_at' with the current datetime and saves the instance"""
