@@ -126,3 +126,4 @@ class DBStorage:
             None
         """
         self.__session.close()
+
