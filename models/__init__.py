@@ -1,13 +1,11 @@
-#!/usr/bin/python3
-"""This module initializes the storage engine for HBNB"""
+from os import getenv
 
-import os
+HBNB_TYPE_STORAGE = getenv('HBNB_TYPE_STORAGE')
 
-if os.environ.get('HBNB_TYPE_STORAGE') == 'db':
+if HBNB_TYPE_STORAGE == 'db':
     from models.engine.db_storage import DBStorage
     storage = DBStorage()
 else:
     from models.engine.file_storage import FileStorage
     storage = FileStorage()
-
 storage.reload()
