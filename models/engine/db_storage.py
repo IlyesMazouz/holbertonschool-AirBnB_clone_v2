@@ -1,64 +1,81 @@
 #!/usr/bin/python3
-"""This module defines the DBStorage engine"""
+"""This module defines a class to manage file storage for the hbnb clone"""
 
-from os import getenv
-import models
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session
+import json
 
 
-class DBStorage:
-    """This class manages the storage using SQLAlchemy with MySQL"""
+class FileStorage:
+    """This class manages the storage of hbnb models in JSON format"""
 
-    __engine = None
-    __session = None
-
-    def __init__(self):
-        """Instantiates a new DBStorage object"""
-        HBNB_MYSQL_USER = getenv('HBNB_MYSQL_USER')
-        HBNB_MYSQL_PWD = getenv('HBNB_MYSQL_PWD')
-        HBNB_MYSQL_HOST = getenv('HBNB_MYSQL_HOST')
-        HBNB_MYSQL_DB = getenv('HBNB_MYSQL_DB')
-        HBNB_ENV = getenv('HBNB_ENV')
-
-        self.__engine = create_engine('mysql+mysqldb://{}:{}@{}/{}'.format(
-            HBNB_MYSQL_USER, HBNB_MYSQL_PWD,
-            HBNB_MYSQL_HOST, HBNB_MYSQL_DB), pool_pre_ping=True)
-        if HBNB_ENV == "test":
-            Base.metadata.drop_all(self.__engine)
+    __file_path = "file.json"
+    __objects = {}
 
     def all(self, cls=None):
-        """Query on the current database session"""
-        all_dict = {}
-        for itr in models.classes.keys():
-            if cls is None or cls == models.classes[itr] or cls == itr:
-                objs = self.__session.query(models.classes[itr]).all()
-                for obj in objs:
-                    key = obj.__class__.__name__ + '.' + obj.id
-                    all_dict[key] = obj
-        return all_dict
+        """
+        Returns a dictionary of models currently in storage.
+
+        If cls is provided, returns a dictionary
+        of models of the specified class.
+        """
+        if cls is not None:
+            new = {}
+            for key, value in self.__objects.items():
+                if isinstance(value, cls):
+                    new[key] = value
+            return new
+        return FileStorage.__objects
 
     def new(self, obj):
-        """Add the object to the current database session"""
-        if obj:
-            self.__session.add(obj)
+        """Adds a new object to the storage dictionary"""
+        self.all().update({obj.to_dict()["__class__"] + "." + obj.id: obj})
 
     def save(self):
-        """Commit all changes of the current database session"""
-        self.__session.commit()
-
-    def delete(self, obj=None):
-        """Delete from the current database session"""
-        if obj:
-            self.__session.delete(obj)
+        """Saves the storage dictionary to a file in JSON format"""
+        with open(FileStorage.__file_path, "w") as f:
+            temp = {}
+            temp.update(FileStorage.__objects)
+            for key, val in temp.items():
+                temp[key] = val.to_dict()
+            json.dump(temp, f, indent=2)
 
     def reload(self):
-        """Create all tables in the database"""
-        Base.metadata.create_all(self.__engine)
-        session = sessionmaker(bind=self.__engine, expire_on_commit=False)
-        Session = scoped_session(session)
-        self.__session = Session()
+        """Loads the storage dictionary from the JSON file"""
+        from models.base_model import BaseModel
+        from models.user import User
+        from models.state import State
+        from models.city import City
+        from models.place import Place
+        from models.amenity import Amenity
+        from models.review import Review
+
+        classes = {
+            "BaseModel": BaseModel,
+            "User": User,
+            "Place": Place,
+            "State": State,
+            "City": City,
+            "Amenity": Amenity,
+            "Review": Review,
+        }
+        try:
+            temp = {}
+            with open(FileStorage.__file_path, "r") as f:
+                temp = json.load(f)
+                for key, val in temp.items():
+                    self.all()[key] = classes[val["__class__"]](**val)
+        except FileNotFoundError:
+            pass
+
+    def delete(self, obj=None):
+        """Deletes an object from the storage dictionary"""
+        if obj:
+            key = "{}.{}".format(type(obj).__name__, obj.id)
+        else:
+            return
+        if key in self.__objects:
+            del self.__objects[key]
+            self.save()
 
     def close(self):
-        """Dispose of the current session"""
-        self.__session.remove()
+        """Closes the session and reloads the data"""
+        self.reload()
