@@ -1,82 +1,84 @@
 #!/usr/bin/python3
-"""This module defines the DBStorage class for the HBNB project
+"""This module defines the BaseModel class for the HBNB project
 
-The DBStorage class manages the storage of HBNB models in the database
-It provides methods for querying, adding, saving, and deleting objects
+The BaseModel class is a base class for all HBNB models It defines common
+attributes and methods that are used across all model classes
 """
 
-from sqlalchemy import create_engine
-from os import getenv
-from models.amenity import Amenity
-from models.city import City
-from models.place import Place
-from models.review import Review
-from models.state import State
-from models.user import User
-from models.base_model import BaseModel, Base
-from sqlalchemy.orm import sessionmaker, scoped_session
+import uuid
+from uuid import uuid4
+from datetime import datetime
+from sqlalchemy import Column, Integer, Sequence, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from models import storage
 
 
-class DBStorage():
-    """DBStorage class for the HBNB project
+Base = declarative_base()
+
+
+class BaseModel:
+    """BaseModel class for the HBNB project
 
     Attributes:
-        __engine (Engine): The database engine for SQLAlchemy
-        __session (Session): The current database session
+        id (str): The unique identifier for the BaseModel instance
+        created_at (datetime): The datetime when the instance is created
+        updated_at (datetime): The datetime when the instance is last updated
     """
 
-    __engine = None
-    __session = None
+    id = Column(String(60), nullable=False, primary_key=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
-    def __init__(self):
-        """Initialize a new database storage and create the engine."""
-        self.__engine = create_engine("mysql+mysqldb://{}:{}@{}/{}".
-                                      format(getenv('HBNB_MYSQL_USER'),
-                                             getenv('HBNB_MYSQL_PWD'),
-                                             getenv('HBNB_MYSQL_HOST'),
-                                             getenv('HBNB_MYSQL_DB')),
-                                      pool_pre_ping=True)
-        if getenv('HBNB_ENV') == 'test':
-            Base.metadata.drop_all(self.__engine)
+    def __init__(self, *args, **kwargs):
+        """Initialize a new BaseModel instance
 
-    def all(self, cls=None):
-        """Query the current database session for objects of the given class
-
-        If cls is None, it queries all types of objects
-        Returns:
-            dict: A dictionary of queried classes in the format
-            <class name>.<obj id> = obj
+        Args:
+            *args: Variable length argument list
+            **kwargs: Arbitrary keyword arguments
         """
-        if cls is None:
-            objs = self.__session.query(State, City, User,
-                                        Review, Place, Amenity).all()
-        else:
-            objs = self.__session.query(cls.__class__.__name__)
-        resu = {}
-        for obj in objs:
-            resu[obj.__class__.__name__ + "." + obj.id] = obj
-        return resu
+        self.id = str(uuid4())
+        self.created_at = self.updated_at = datetime.utcnow()
+        if kwargs:
+            for key, value in kwargs.items():
+                if key == "created_at" or key == "updated_at":
+                    value = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%f")
+                if key != "__class__":
+                    setattr(self, key, value)
 
-    def new(self, obj):
-        """Add obj to the current database session"""
-        self.__session.add(obj)
+    def __str__(self):
+        """Return a string representation of the BaseModel instance
+
+        Returns:
+            str: A string representation of the instance
+        """
+        cls = (str(type(self)).split(".")[-1]).split("'")[0]
+        return "[{}] ({}) {}".format(cls, self.id, self.__dict__)
 
     def save(self):
-        """Commit all changes to the current database session"""
-        self.__session.commit()
+        """Update the updated_at attribute with the current datetime
 
-    def delete(self, obj=None):
-        """Delete obj from the current database session"""
-        if obj:
-            self.__session.delete(obj)
+        Also, add the instance to the storage and save it to the database
+        """
+        self.updated_at = datetime.now()
+        storage.new(self)
+        storage.save()
 
-    def reload(self):
-        """Reload the database"""
-        Base.metadata.create_all(self.__engine)
+    def to_dict(self):
+        """Convert the instance into a dictionary format
 
-        session_factory = sessionmaker(bind=self.__engine,
-                                       expire_on_commit=False)
-        Session = scoped_session(session_factory)
+        Returns:
+            dict: A dictionary representation of the instance
+        """
+        dictionary = {}
+        dictionary.update(self.__dict__)
+        dictionary.update({"__class__": (str(type(self)).split(".")[-1]).split("'")[0]})
+        dictionary["created_at"] = self.created_at.isoformat()
+        dictionary["updated_at"] = self.updated_at.isoformat()
+        if "_sa_instance_state" in dictionary:
+            dictionary.pop("_sa_instance_state")
+        return dictionary
 
-        self.__session = Session()
-        
+    def delete(self):
+        """Delete the current instance from the storage and save the changes"""
+        storage.delete(self)
+        storage.save()
